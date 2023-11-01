@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QFileDialog, QMessageBox, QComboBox
 from PyQt5.QtCore import QTimer
+import os
 
 class ChessboardCornerFinderApp(QMainWindow):
     def __init__(self):
@@ -60,23 +61,16 @@ class ChessboardCornerFinderApp(QMainWindow):
         self.tvecs = None
 
     def load_image(self):
-        options = QFileDialog.Options()
-        options |= QFileDialog.ReadOnly
-        file_dialog = QFileDialog()
-        file_dialog.setFileMode(QFileDialog.ExistingFiles)
-        file_dialog.setNameFilter("Images (*.bmp)")
-        file_dialog.setViewMode(QFileDialog.List)
-        if file_dialog.exec_():
-            self.image_paths = file_dialog.selectedFiles()
-            if self.image_paths:
-                self.update_image_selection_combo()
-                self.current_image_index = 0
-                self.image = []
-                for img_path in self.image_paths:
-                    img = cv2.imread(img_path)
-                QMessageBox.information(self, "Info", "Images loaded successfully.")
-            else:
-                QMessageBox.warning(self, "Warning", "Images loaded failed.")
+        folder = QFileDialog.getExistingDirectory(self, "Select a folder")
+        if folder:
+            file_list = os.listdir(folder)
+            bmp_files = [file for file in file_list if file.lower().endswith(".bmp")]
+            self.image_paths = [os.path.join(folder, bmp_file) for bmp_file in bmp_files]
+            self.update_image_selection_combo()
+            self.current_image_index = 0
+            QMessageBox.information(self, "Info", "Images loaded successfully.")
+        else:
+            QMessageBox.warning(self, "Warning", "Images loaded failed.")
 
     def update_image_selection_combo(self):
         self.image_selection_combo.clear()
@@ -136,15 +130,15 @@ class ChessboardCornerFinderApp(QMainWindow):
 
     def find_extrinsic_matrix(self):
         selected_index = self.current_image_index
-        selected_image_path = self.image_paths[selected_index]
         self.find_instrinsic_matrix()
         rotation_matrix, _ = cv2.Rodrigues(self.rvecs[selected_index])
         extrinsic_matrix = np.hstack((rotation_matrix, self.tvecs[selected_index]))
-        print("Extrinsic Matrix:")
+        print("Extrinsic Matrix",selected_index+1,":")
         print(extrinsic_matrix)
     
     def find_and_display_distortion(self):
         self.find_instrinsic_matrix()
+        print('Distortion Matrix')
         print(self.dist)
 
     def show_result1(self):
