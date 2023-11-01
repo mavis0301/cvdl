@@ -25,29 +25,39 @@ class ChessboardCornerFinderApp(QMainWindow):
 
         self.find_corner_button = QPushButton("1.1 Find Corners")
         self.find_corner_button.clicked.connect(self.find_and_display_corners)
-        layout.addWidget(self.find_corner_button)
-        self.find_corner_button.setEnabled(False)  
+        layout.addWidget(self.find_corner_button) 
 
         self.find_intrinsic_button = QPushButton("1.2 Find Intrinsic")
-        self.find_intrinsic_button.clicked.connect(self.find_intrinsic_matrix)
+        self.find_intrinsic_button.clicked.connect(self.find_and_display_intrinsic_matrix)
         layout.addWidget(self.find_intrinsic_button)
-        self.find_intrinsic_button.setEnabled(False)
 
-        # self.image_selection_combo = QComboBox()
-        # self.image_selection_combo.activated.connect(self.update_current_index)
-        # layout.addWidget(self.image_selection_combo)
-        # self.find_extrinsic_button = QPushButton("1.3 Find Extrinsic")
-        # self.find_extrinsic_button.clicked.connect(self.find_extrinsic_matrix)
-        # layout.addWidget(self.find_extrinsic_button)
-        # self.find_extrinsic_button.setEnabled(False)
+        self.image_selection_combo = QComboBox()
+        self.image_selection_combo.activated.connect(self.update_current_index)
+        layout.addWidget(self.image_selection_combo)
+        self.find_extrinsic_button = QPushButton("1.3 Find Extrinsic")
+        self.find_extrinsic_button.clicked.connect(self.find_extrinsic_matrix)
+        layout.addWidget(self.find_extrinsic_button)
 
+        self.find_intrinsic_button = QPushButton("1.4 Find Distortion")
+        self.find_intrinsic_button.clicked.connect(self.find_and_display_distortion)
+        layout.addWidget(self.find_intrinsic_button)
+        
+        self.find_intrinsic_button = QPushButton("1.5 Show Result")
+        self.find_intrinsic_button.clicked.connect(self.show_result1)
+        layout.addWidget(self.find_intrinsic_button)
         
 
         self.width = 11
         self.height = 8
         self.image_paths = []
-        self.image = []
-
+        self.current_image_index = 0
+        self.criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        self.ret = None
+        self.intrinsic_matrix = None
+        self.dist = None
+        # self.corners = None
+        self.rvecs = None
+        self.tvecs = None
 
     def load_image(self):
         options = QFileDialog.Options()
@@ -59,17 +69,11 @@ class ChessboardCornerFinderApp(QMainWindow):
         if file_dialog.exec_():
             self.image_paths = file_dialog.selectedFiles()
             if self.image_paths:
-                self.find_corner_button.setEnabled(True)
-                self.find_intrinsic_button.setEnabled(True)
-                # self.update_image_selection_combo()
-                # self.find_extrinsic_button.setEnabled(True)
+                self.update_image_selection_combo()
                 self.current_image_index = 0
                 self.image = []
                 for img_path in self.image_paths:
                     img = cv2.imread(img_path)
-                    self.image.append(img)
-
-
                 QMessageBox.information(self, "Info", "Images loaded successfully.")
             else:
                 QMessageBox.warning(self, "Warning", "Images loaded failed.")
@@ -81,83 +85,83 @@ class ChessboardCornerFinderApp(QMainWindow):
     
     def update_current_index(self, index):
         self.current_image_index = index
-    
-    def find_and_display_corners(self):##1.1
-        for img in self.image:
-            grayImg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            ret, corners = cv2.findChessboardCorners(grayImg, (self.width, self.height), None)
-            
-            if ret:
-                criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-                cv2.cornerSubPix(grayImg, corners, (5, 5), (-1, -1), criteria)
-                cornerImage = cv2.drawChessboardCorners(img, (self.width, self.height), corners, ret)
-                cornerImage = cv2.resize(cornerImage, (800, 600))
-                if cornerImage is not None:
-                    cv2.imshow("Chessboard Corners", cornerImage)
-                    cv2.waitKey(0)
-                    cv2.destroyAllWindows()
-            else:
-                QMessageBox.warning(self, "Warning", "No corners found in the image.")
 
-    
+    def findCorner(self, img):
+        grayImg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        ret, corners = cv2.findChessboardCorners(grayImg, (self.width, self.height), None)
+        if ret:
+            cv2.cornerSubPix(grayImg, corners, (5, 5), (-1, -1), self.criteria)
+            return grayImg,corners
+        else:
+            QMessageBox.warning(self, "Warning", "No corners found in the image.")
+
     def generate_object_points(self):#can merge to func
         object_point = np.zeros((self.width * self.height, 3), np.float32)
         object_point[:, :2] = np.mgrid[0:self.width, 0:self.height].T.reshape(-1, 2)
         return object_point
     
-    def find_intrinsic_matrix(self):##1.2
-        if self.image_paths:
-            if len(self.image_paths) > 0:
-                object_points = []
-                image_points = []
-                criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-
-                for img_path in self.image_paths:
-                    image = cv2.imread(img_path)
-                    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-                    ret, corners = cv2.findChessboardCorners(gray_image, (self.width, self.height), None)
-                    if ret:
-                        cv2.cornerSubPix(gray_image, corners, (5, 5), (-1, -1), criteria)
-                        object_points.append(self.generate_object_points())
-                        image_points.append(corners)
-                    else:
-                        QMessageBox.warning(self, "Warning", "No corners found in the image.")
-                
-                if len(object_points) > 0 and len(image_points) > 0:
-                    _, intrinsic_matrix, _, _, _ = cv2.calibrateCamera(object_points, image_points, gray_image.shape[::-1], None, None)
-                    print("Intrinsic Matrix:")
-                    print(intrinsic_matrix)
-                else:
-                    QMessageBox.warning(self, "Warning", "No calibration data available. Please load and find corners in images first.")
+    def find_and_display_corners(self):##1.1
+       for img_path in self.image_paths:
+            img = cv2.imread(img_path)
+            grayImg, corners = self.findCorner(img)
+            cv2.cornerSubPix(grayImg, corners, (5, 5), (-1, -1), self.criteria)
+            cornerImage = cv2.drawChessboardCorners(img, (self.width, self.height), corners, True)
+            cornerImage = cv2.resize(cornerImage, (800, 600))
+            if cornerImage is not None:
+                cv2.imshow("Chessboard Corners", cornerImage)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
             else:
-                QMessageBox.information(self, "Info", "No images loaded.")
-        else:
-            QMessageBox.warning(self, "Warning", "Please load images first.")
+                QMessageBox.warning(self, "Warning", "No corners image.")
 
-    # def find_extrinsic_matrix(self):
-    #     if self.image_paths:
-    #         if len(self.image_paths) > 0:
-    #             if self.current_image_index >= 0 and self.current_image_index < len(self.image_paths):
-    #                 image_path = self.image_paths[self.current_image_index]
-    #                 image = cv2.imread(image_path)
-    #                 gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    #                 ret, corners = cv2.findChessboardCorners(gray_image, (self.width, self.height), None)
-                    
-    #                 if ret:
-    #                     object_points = self.generate_object_points()
-    #                     cv2.cornerSubPix(gray_image, corners, (5, 5), (-1, -1), (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001))
-                        
-    #                     _, intrinsic_matrix, _, _, _ = cv2.calibrateCamera(object_points, [corners], gray_image.shape[::-1], None, None)
-    #                     print("Intrinsic Matrix:")
-    #                     print(intrinsic_matrix)
-    #                 else:
-    #                     QMessageBox.warning(self, "Warning", "No corners found in the selected image.")
-    #             else:
-    #                 QMessageBox.warning(self, "Warning", "Please select an image first.")
-    #         else:
-    #             QMessageBox.information(self, "Info", "No images loaded.")
-    #     else:
-    #         QMessageBox.warning(self, "Warning", "Please load images first.")
+    def find_instrinsic_matrix(self):
+        object_points = []
+        image_points = []
+        for img_path in self.image_paths:
+            img = cv2.imread(img_path)
+            grayImg, corners = self.findCorner(img)
+            object_points.append(self.generate_object_points())
+            image_points.append(corners)            
+
+        self.ret, self.intrinsic_matrix, self.dist, self.rvecs, self.tvecs = cv2.calibrateCamera(object_points, image_points, grayImg.shape[::-1], None, None)
+
+
+    def find_and_display_intrinsic_matrix(self):##1.2
+        if len(self.image_paths) > 0:
+            self.find_instrinsic_matrix()
+            print("Intrinsic Matrix:")
+            print(self.intrinsic_matrix)
+        else:
+            QMessageBox.information(self, "Info", "No images loaded.")
+
+    def find_extrinsic_matrix(self):
+        selected_index = self.current_image_index
+        selected_image_path = self.image_paths[selected_index]
+        self.find_instrinsic_matrix()
+        rotation_matrix, _ = cv2.Rodrigues(self.rvecs[selected_index])
+        extrinsic_matrix = np.hstack((rotation_matrix, self.tvecs[selected_index]))
+        print("Extrinsic Matrix:")
+        print(extrinsic_matrix)
+    
+    def find_and_display_distortion(self):
+        self.find_instrinsic_matrix()
+        print(self.dist)
+
+    def show_result1(self):
+        self.find_instrinsic_matrix()
+        for i in self.image_paths:
+            img = cv2.imread(i)
+            undistorted_image = cv2.undistort(img, self.intrinsic_matrix, self.dist)
+            img = cv2.resize(img, (800, 600))
+            undistorted_image = cv2.resize(undistorted_image, (800, 600))
+            merged_image = np.hstack((img, undistorted_image))
+            cv2.imshow("Original and Undistorted", merged_image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+
+
+
 
 
 
