@@ -1,8 +1,8 @@
 import sys
 import cv2
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QFileDialog, QMessageBox, QComboBox
-from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QFileDialog, QMessageBox, QComboBox, QLineEdit
+from PyQt5.QtCore import Qt
 import os
 
 class ChessboardCornerFinderApp(QMainWindow):
@@ -20,7 +20,7 @@ class ChessboardCornerFinderApp(QMainWindow):
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
-        self.load_image_button = QPushButton("Load Image")
+        self.load_image_button = QPushButton("Load folder")
         self.load_image_button.clicked.connect(self.load_image)
         layout.addWidget(self.load_image_button)
 
@@ -28,25 +28,52 @@ class ChessboardCornerFinderApp(QMainWindow):
         self.find_corner_button.clicked.connect(self.find_and_display_corners)
         layout.addWidget(self.find_corner_button) 
 
-        self.find_intrinsic_button = QPushButton("1.2 Find Intrinsic")
+        self.find_intrinsic_button = QPushButton("1.2 Find intrinsic")
         self.find_intrinsic_button.clicked.connect(self.find_and_display_intrinsic_matrix)
         layout.addWidget(self.find_intrinsic_button)
 
         self.image_selection_combo = QComboBox()
         self.image_selection_combo.activated.connect(self.update_current_index)
         layout.addWidget(self.image_selection_combo)
-        self.find_extrinsic_button = QPushButton("1.3 Find Extrinsic")
+        self.find_extrinsic_button = QPushButton("1.3 Find extrinsic")
         self.find_extrinsic_button.clicked.connect(self.find_extrinsic_matrix)
         layout.addWidget(self.find_extrinsic_button)
 
-        self.find_intrinsic_button = QPushButton("1.4 Find Distortion")
+        self.find_intrinsic_button = QPushButton("1.4 Find distortion")
         self.find_intrinsic_button.clicked.connect(self.find_and_display_distortion)
         layout.addWidget(self.find_intrinsic_button)
         
-        self.find_intrinsic_button = QPushButton("1.5 Show Result")
+        self.find_intrinsic_button = QPushButton("1.5 Show result")
         self.find_intrinsic_button.clicked.connect(self.show_result1)
         layout.addWidget(self.find_intrinsic_button)
+
+        self.inputWord = QLineEdit(self)
+        self.inputWord.setMaxLength(6)
+        layout.addWidget(self.inputWord)
         
+        self.find_intrinsic_button = QPushButton("2.1 show words on board")
+        self.find_intrinsic_button.clicked.connect(self.showWord)
+        layout.addWidget(self.find_intrinsic_button)
+
+        self.find_intrinsic_button = QPushButton("2.2 show words vertical")
+        self.find_intrinsic_button.clicked.connect(self.showWord_Vertical)
+        layout.addWidget(self.find_intrinsic_button)
+
+        self.open_ImgL = QPushButton("Load Image_L", self)
+        # self.open_file_button.setGeometry(150, 80, 200, 30)
+        self.open_ImgL.clicked.connect(self.loadImgL)
+        layout.addWidget(self.open_ImgL)
+
+        self.open_ImgR = QPushButton("Load Image_R", self)
+        # self.open_file_button.setGeometry(150, 80, 200, 30)
+        self.open_ImgR.clicked.connect(self.loadImgR)
+        layout.addWidget(self.open_ImgR)
+
+        self.find_disparity = QPushButton("3.1 stereo disparity map", self)
+        # self.open_file_button.setGeometry(150, 80, 200, 30)
+        self.find_disparity.clicked.connect(self.findDisparityMap)
+        layout.addWidget(self.find_disparity)
+
 
         self.width = 11
         self.height = 8
@@ -59,6 +86,7 @@ class ChessboardCornerFinderApp(QMainWindow):
         # self.corners = None
         self.rvecs = None
         self.tvecs = None
+        self.wordLoc = [[7,5],[4,5],[1,5],[7,2],[4,2],[1,2]]
 
     def load_image(self):
         folder = QFileDialog.getExistingDirectory(self, "Select a folder")
@@ -89,7 +117,7 @@ class ChessboardCornerFinderApp(QMainWindow):
         else:
             QMessageBox.warning(self, "Warning", "No corners found in the image.")
 
-    def generate_object_points(self):#can merge to func
+    def generate_object_points(self):
         object_point = np.zeros((self.width * self.height, 3), np.float32)
         object_point[:, :2] = np.mgrid[0:self.width, 0:self.height].T.reshape(-1, 2)
         return object_point
@@ -153,6 +181,88 @@ class ChessboardCornerFinderApp(QMainWindow):
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
+
+    def showWord(self):##2.1
+        fs = cv2.FileStorage('Q2_Image/Q2_lib/alphabet_lib_onboard.txt', cv2.FILE_STORAGE_READ)
+        input = self.inputWord.text()
+        letters = list(input)
+        chlist = np.empty((0, 3), dtype=np.int32)
+        for c in range(len(letters)):
+            ch = fs.getNode(letters[c]).mat()
+            ch = np.float32(ch).reshape(-1,3)
+            ch[:,0] = ch[:,0]+self.wordLoc[c][0]
+            ch[:,1] = ch[:,1]+self.wordLoc[c][1]
+            chlist = np.vstack((chlist, ch))
+        for i in range(len(self.image_paths)):
+            image = cv2.imread(self.image_paths[i])
+            self.find_instrinsic_matrix()
+            imgpts, jac = cv2.projectPoints(chlist, self.rvecs[i], self.tvecs[i], self.intrinsic_matrix, self.dist)
+            imgpts = imgpts.astype(np.int32)
+            for j in range(len(imgpts)//2):
+                image = cv2.line(image, tuple(imgpts[j*2].ravel()), tuple(imgpts[j*2+1].ravel()), (0, 0, 255), 5)
+            image = cv2.resize(image, (800, 600))
+            cv2.imshow("word", image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+    def showWord_Vertical(self):##2.2
+        fs = cv2.FileStorage('Q2_Image/Q2_lib/alphabet_lib_vertical.txt', cv2.FILE_STORAGE_READ)
+        input = self.inputWord.text()
+        letters = list(input)
+        chlist = np.empty((0, 3), dtype=np.int32)
+        for c in range(len(letters)):
+            ch = fs.getNode(letters[c]).mat()
+            ch = np.float32(ch).reshape(-1,3)
+            ch[:,0] = ch[:,0]+self.wordLoc[c][0]
+            ch[:,1] = ch[:,1]+self.wordLoc[c][1]
+            chlist = np.vstack((chlist, ch))
+        for i in range(len(self.image_paths)):
+            image = cv2.imread(self.image_paths[i])
+            self.find_instrinsic_matrix()
+            imgpts, jac = cv2.projectPoints(chlist, self.rvecs[i], self.tvecs[i], self.intrinsic_matrix, self.dist)
+            imgpts = imgpts.astype(np.int32)
+            for j in range(len(imgpts)//2):
+                image = cv2.line(image, tuple(imgpts[j*2].ravel()), tuple(imgpts[j*2+1].ravel()), (0, 0, 255), 5)
+            image = cv2.resize(image, (800, 600))
+            cv2.imshow("word", image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+    def loadImgL(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.ReadOnly
+        self.imgL_path, _ = QFileDialog.getOpenFileName(self, "Open PNG File", "", "PNG Files (*.png);;All Files (*)", options=options)
+        self.imgL = cv2.imread(self.imgL_path, cv2.IMREAD_GRAYSCALE)
+
+
+    def loadImgR(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.ReadOnly
+        self.imgR_path, _ = QFileDialog.getOpenFileName(self, "Open PNG File", "", "PNG Files (*.png);;All Files (*)", options=options)
+        self.imgR = cv2.imread(self.imgR_path, cv2.IMREAD_GRAYSCALE)
+
+    def findDisparityMap(self):
+        imgl = self.imgL
+        imgr = self.imgR
+        imgL = cv2.resize(imgl, None, fx=0.6, fy=0.6)
+        imgR = cv2.resize(imgr, None, fx=0.6, fy=0.6)
+        stereo = cv2.StereoBM_create(numDisparities=256, blockSize=25)
+        disparity = stereo.compute(imgL, imgR)
+        disparity = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX)
+        disparity = disparity.astype(np.uint8)
+        disparity= cv2.resize(disparity, (800, 600))
+        imgL= cv2.resize(imgL, (800, 600))
+        imgR= cv2.resize(imgR, (800, 600))
+        cv2.namedWindow('disparity', cv2.WINDOW_NORMAL)
+        cv2.imshow("R",imgR)
+        cv2.imshow("L",imgL)
+        cv2.imshow("disparity",disparity)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
+    
+    
 
 
 

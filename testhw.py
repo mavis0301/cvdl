@@ -1,8 +1,9 @@
 import sys
 import cv2
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QFileDialog, QMessageBox, QComboBox
-from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLabel, QFileDialog, QMessageBox, QComboBox, QLineEdit
+from PyQt5.QtCore import Qt
+import os
 
 class ChessboardCornerFinderApp(QMainWindow):
     def __init__(self):
@@ -19,7 +20,7 @@ class ChessboardCornerFinderApp(QMainWindow):
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
-        self.load_image_button = QPushButton("Load Image")
+        self.load_image_button = QPushButton("Load folder")
         self.load_image_button.clicked.connect(self.load_image)
         layout.addWidget(self.load_image_button)
 
@@ -45,6 +46,17 @@ class ChessboardCornerFinderApp(QMainWindow):
         self.find_intrinsic_button = QPushButton("1.5 Show Result")
         self.find_intrinsic_button.clicked.connect(self.show_result1)
         layout.addWidget(self.find_intrinsic_button)
+
+        self.inputWord = QLineEdit(self)
+        self.inputWord.setMaxLength(6)
+        
+        self.find_intrinsic_button = QPushButton("2.1 Show Words")
+        self.find_intrinsic_button.clicked.connect(self.showWord)
+        layout.addWidget(self.find_intrinsic_button)
+
+        self.find_intrinsic_button = QPushButton("2.2 Show Words Vertically")
+        self.find_intrinsic_button.clicked.connect(self.showWord_Vertical)
+        layout.addWidget(self.find_intrinsic_button)
         
 
         self.width = 11
@@ -58,25 +70,19 @@ class ChessboardCornerFinderApp(QMainWindow):
         # self.corners = None
         self.rvecs = None
         self.tvecs = None
+        self.wordLoc = [[7,5],[4,5],[1,5],[7,2],[4,2],[1,2]]
 
     def load_image(self):
-        options = QFileDialog.Options()
-        options |= QFileDialog.ReadOnly
-        file_dialog = QFileDialog()
-        file_dialog.setFileMode(QFileDialog.ExistingFiles)
-        file_dialog.setNameFilter("Images (*.bmp)")
-        file_dialog.setViewMode(QFileDialog.List)
-        if file_dialog.exec_():
-            self.image_paths = file_dialog.selectedFiles()
-            if self.image_paths:
-                self.update_image_selection_combo()
-                self.current_image_index = 0
-                self.image = []
-                for img_path in self.image_paths:
-                    img = cv2.imread(img_path)
-                QMessageBox.information(self, "Info", "Images loaded successfully.")
-            else:
-                QMessageBox.warning(self, "Warning", "Images loaded failed.")
+        folder = QFileDialog.getExistingDirectory(self, "Select a folder")
+        if folder:
+            file_list = os.listdir(folder)
+            bmp_files = [file for file in file_list if file.lower().endswith(".bmp")]
+            self.image_paths = [os.path.join(folder, bmp_file) for bmp_file in bmp_files]
+            self.update_image_selection_combo()
+            self.current_image_index = 0
+            QMessageBox.information(self, "Info", "Images loaded successfully.")
+        else:
+            QMessageBox.warning(self, "Warning", "Images loaded failed.")
 
     def update_image_selection_combo(self):
         self.image_selection_combo.clear()
@@ -95,7 +101,7 @@ class ChessboardCornerFinderApp(QMainWindow):
         else:
             QMessageBox.warning(self, "Warning", "No corners found in the image.")
 
-    def generate_object_points(self):#can merge to func
+    def generate_object_points(self):
         object_point = np.zeros((self.width * self.height, 3), np.float32)
         object_point[:, :2] = np.mgrid[0:self.width, 0:self.height].T.reshape(-1, 2)
         return object_point
@@ -136,15 +142,15 @@ class ChessboardCornerFinderApp(QMainWindow):
 
     def find_extrinsic_matrix(self):
         selected_index = self.current_image_index
-        selected_image_path = self.image_paths[selected_index]
         self.find_instrinsic_matrix()
         rotation_matrix, _ = cv2.Rodrigues(self.rvecs[selected_index])
         extrinsic_matrix = np.hstack((rotation_matrix, self.tvecs[selected_index]))
-        print("Extrinsic Matrix:")
+        print("Extrinsic Matrix",selected_index+1,":")
         print(extrinsic_matrix)
     
     def find_and_display_distortion(self):
         self.find_instrinsic_matrix()
+        print('Distortion Matrix')
         print(self.dist)
 
     def show_result1(self):
@@ -159,6 +165,55 @@ class ChessboardCornerFinderApp(QMainWindow):
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
+
+    def showWord(self):##2.1
+        fs = cv2.FileStorage('Q2_Image/Q2_lib/alphabet_lib_onboard.txt', cv2.FILE_STORAGE_READ)
+        input = self.inputWord.text()
+        letters = list(input)
+        chlist = np.empty((0, 3), dtype=np.int32)
+        for c in range(len(letters)):
+            ch = fs.getNode(letters[c]).mat()
+            ch = np.float32(ch).reshape(-1,3)
+            ch[:,0] = ch[:,0]+self.wordLoc[c][0]
+            ch[:,1] = ch[:,1]+self.wordLoc[c][1]
+            chlist = np.vstack((chlist, ch))
+        for i in range(len(self.image_paths)):
+            image = cv2.imread(self.image_paths[i])
+            self.find_instrinsic_matrix()
+            imgpts, jac = cv2.projectPoints(chlist, self.rvecs[i], self.tvecs[i], self.intrinsic_matrix, self.dist)
+            imgpts = imgpts.astype(np.int32)
+            for j in range(len(imgpts)//2):
+                image = cv2.line(image, tuple(imgpts[j*2].ravel()), tuple(imgpts[j*2+1].ravel()), (0, 0, 255), 5)
+            image = cv2.resize(image, (800, 600))
+            cv2.imshow("word", image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+    def showWord_Vertical(self):##2.2
+        fs = cv2.FileStorage('Q2_Image/Q2_lib/alphabet_lib_vertical.txt', cv2.FILE_STORAGE_READ)
+        input = self.inputWord.text()
+        letters = list(input)
+        chlist = np.empty((0, 3), dtype=np.int32)
+        for c in range(len(letters)):
+            ch = fs.getNode(letters[c]).mat()
+            ch = np.float32(ch).reshape(-1,3)
+            ch[:,0] = ch[:,0]+self.wordLoc[c][0]
+            ch[:,1] = ch[:,1]+self.wordLoc[c][1]
+            chlist = np.vstack((chlist, ch))
+        for i in range(len(self.image_paths)):
+            image = cv2.imread(self.image_paths[i])
+            self.find_instrinsic_matrix()
+            imgpts, jac = cv2.projectPoints(chlist, self.rvecs[i], self.tvecs[i], self.intrinsic_matrix, self.dist)
+            imgpts = imgpts.astype(np.int32)
+            for j in range(len(imgpts)//2):
+                image = cv2.line(image, tuple(imgpts[j*2].ravel()), tuple(imgpts[j*2+1].ravel()), (0, 0, 255), 5)
+            image = cv2.resize(image, (800, 600))
+            cv2.imshow("word", image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+    
+    
 
 
 
