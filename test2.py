@@ -74,6 +74,20 @@ class ChessboardCornerFinderApp(QMainWindow):
         self.find_disparity.clicked.connect(self.findDisparityMap)
         layout.addWidget(self.find_disparity)
 
+        self.load1 = QPushButton("Load Image 1")
+        self.load1.clicked.connect(self.loadImage1)
+        layout.addWidget(self.load1)
+
+        self.load2 = QPushButton("Load Image 2")
+        self.load2.clicked.connect(self.loadImage2)
+        layout.addWidget(self.load2)
+
+        self.keyPoint = QPushButton("4.1 Keypoints")
+        self.keyPoint.clicked.connect(self.findKeyPoint)
+        layout.addWidget(self.keyPoint)
+
+
+
 
         self.width = 11
         self.height = 8
@@ -87,6 +101,13 @@ class ChessboardCornerFinderApp(QMainWindow):
         self.rvecs = None
         self.tvecs = None
         self.wordLoc = [[7,5],[4,5],[1,5],[7,2],[4,2],[1,2]]
+        self.disparity = None
+        self.imgL = None
+        self.imgR = None
+        self.dotX = None
+        self.dotY = None
+        self.img1_path = None
+        self.img1 = None
 
     def load_image(self):
         folder = QFileDialog.getExistingDirectory(self, "Select a folder")
@@ -233,6 +254,7 @@ class ChessboardCornerFinderApp(QMainWindow):
         options |= QFileDialog.ReadOnly
         self.imgL_path, _ = QFileDialog.getOpenFileName(self, "Open PNG File", "", "PNG Files (*.png);;All Files (*)", options=options)
         self.imgL = cv2.imread(self.imgL_path, cv2.IMREAD_GRAYSCALE)
+        self.imgL = cv2.resize(self.imgL, None, fx=0.6, fy=0.6)
 
 
     def loadImgR(self):
@@ -240,28 +262,85 @@ class ChessboardCornerFinderApp(QMainWindow):
         options |= QFileDialog.ReadOnly
         self.imgR_path, _ = QFileDialog.getOpenFileName(self, "Open PNG File", "", "PNG Files (*.png);;All Files (*)", options=options)
         self.imgR = cv2.imread(self.imgR_path, cv2.IMREAD_GRAYSCALE)
+        self.imgR = cv2.resize(self.imgR, None, fx=0.6, fy=0.6)
+        
+
+    def disparityClick(self,event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if x >= 0 and x < self.disparity.shape[1] and y >= 0 and y < self.disparity.shape[0]:
+                disparityClick = self.disparity[y, x]
+
+                if disparityClick > 0:
+                    disparityClick = int(disparityClick)
+                    self.dotX = x - disparityClick
+                    self.dotY = y         
 
     def findDisparityMap(self):
-        imgl = self.imgL
-        imgr = self.imgR
-        imgL = cv2.resize(imgl, None, fx=0.6, fy=0.6)
-        imgR = cv2.resize(imgr, None, fx=0.6, fy=0.6)
-        stereo = cv2.StereoBM_create(numDisparities=256, blockSize=25)
-        disparity = stereo.compute(imgL, imgR)
-        disparity = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX)
-        disparity = disparity.astype(np.uint8)
-        disparity= cv2.resize(disparity, (800, 600))
-        imgL= cv2.resize(imgL, (800, 600))
-        imgR= cv2.resize(imgR, (800, 600))
-        cv2.namedWindow('disparity', cv2.WINDOW_NORMAL)
-        cv2.imshow("R",imgR)
-        cv2.imshow("L",imgL)
-        cv2.imshow("disparity",disparity)
+        if self.imgL is not None and self.imgR is not None :
+            imgL = self.imgL
+            imgR = self.imgR
+            # stereo = cv2.StereoBM_create(numDisparities=256, blockSize=25)
+            # disparity = stereo.compute(self.imgL, self.imgR)
+            # disparity = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX)
+            # self.disparity = disparity.astype(np.uint8)
+            
+            # imgL = cv2.imread('Q3_Image/imL.png', cv2.IMREAD_GRAYSCALE)
+            # imgR = cv2.imread('Q3_Image/imR.png', cv2.IMREAD_GRAYSCALE)
+            # imgL = cv2.resize(imgL, None, fx=0.6, fy=0.6)
+            # imgR = cv2.resize(imgR, None, fx=0.6, fy=0.6)
+            stereo = cv2.StereoBM_create(numDisparities=256, blockSize=25)
+            self.disparity = stereo.compute(imgL, imgR)
+            self.disparity = cv2.normalize(self.disparity, None, 0, 255, cv2.NORM_MINMAX)
+            self.disparity = self.disparity.astype(np.uint8)
+            # imgL = self.imgL = cv2.resize(self.imgL, (800,600))
+            # imgR = self.imgR = cv2.resize(self.imgR, (800,600))
+            disparity = cv2.resize(self.disparity, (800,600))
+            cv2.namedWindow('disparity')
+            cv2.imshow("disparity",disparity)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            # disparity= cv2.resize(disparity, (800, 600))
+            # imgL= cv2.resize(imgL, (800, 600))
+            # imgR= cv2.resize(imgR, (800, 600))
+            cv2.namedWindow('ImageL', cv2.WINDOW_NORMAL)
+            cv2.namedWindow('ImageR', cv2.WINDOW_NORMAL)
+            
+            cv2.setMouseCallback("ImageL", self.disparityClick)
+            while True:
+                cv2.circle(imgR, (self.dotX, self.dotY), 8, (0, 0, 255), -1)
+                cv2.imshow("ImageL",imgL)
+                cv2.imshow("ImageR",imgR)
+                
+                # cv2.waitKey(0)
+                key = cv2.waitKey(1) & 0xFF
+                if key == 27:  # Press ESC to exit
+                    break
+            cv2.destroyAllWindows()
+        else:
+            QMessageBox.information(self, "Info", "No images loaded.")
+
+    def loadImage1(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.ReadOnly
+        self.img1_path, _ = QFileDialog.getOpenFileName(self, "Open JPG File", "", "JPG Files (*.jpg);;All Files (*)", options=options)
+        self.img1 = cv2.imread(self.img1_path)
+        self.img1 = cv2.resize(self.img1, None, fx=0.3, fy=0.3)
+
+    def loadImage2(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.ReadOnly
+        self.img2_path, _ = QFileDialog.getOpenFileName(self, "Open JPG File", "", "JPG Files (*.jpg);;All Files (*)", options=options)
+        self.img2 = cv2.imread(self.img2_path)
+        self.img2 = cv2.resize(self.img2, None, fx=0.3, fy=0.3)
+
+    def findKeyPoint(self):
+        img1 = cv2.cvtColor(self.img1, cv2.COLOR_BGR2GRAY)
+        sift = cv2.SIFT_create()
+        kp, des = sift.detectAndCompute(img1, None)
+        left_image_with_keypoints = cv2.drawKeypoints(self.img1, kp, None, color=(0, 255, 0))
+        cv2.imshow('Left Image with Keypoints', left_image_with_keypoints)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-
-
-    
     
 
 
