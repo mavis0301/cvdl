@@ -16,21 +16,38 @@ import numpy as np
 # cv2.destroyAllWindows()
 
 
-left_image = cv2.imread('Q4_Image/Left.jpg')
+import cv2
 
-left_image = cv2.resize(left_image, None, fx=0.3, fy=0.3)
+# 加载左图像（Image 1）
+left_image = cv2.imread('Q4_Image/Left.jpg')
 gray_left = cv2.cvtColor(left_image, cv2.COLOR_BGR2GRAY)
+
+# 加载右图像（Image 2）
+right_image = cv2.imread('Q4_Image/Right.jpg')
+gray_right = cv2.cvtColor(right_image, cv2.COLOR_BGR2GRAY)
+
 # 创建SIFT检测器
 sift = cv2.SIFT_create()
 
-# 检测关键点和计算描述符
-kp, des = sift.detectAndCompute(gray_left, None)
+# 在左图像和右图像上检测关键点和计算描述符
+kp1, des1 = sift.detectAndCompute(gray_left, None)
+kp2, des2 = sift.detectAndCompute(gray_right, None)
 
-# 绘制关键点在左图像上
-left_image_with_keypoints = cv2.drawKeypoints(left_image, kp, None, color=(0, 255, 0))
+# 使用BFMatcher.knnMatch来匹配关键点
+bf = cv2.BFMatcher()
+matches = bf.knnMatch(des1, des2, k=2)
 
-# 显示带有关键点的左图像
-cv2.imshow('Left Image with Keypoints', left_image_with_keypoints)
+# 提取好的匹配
+good_matches = []
+for m, n in matches:
+    if m.distance < 0.75 * n.distance:
+        good_matches.append(m)
+
+# 绘制匹配关键点
+matched_image = cv2.drawMatches(left_image, kp1, right_image, kp2, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+matched_image = cv2.resize(matched_image,None,fx=0.3,fy=0.3)
+# 显示匹配关键点的图像
+cv2.imshow('Matched Keypoints', matched_image)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 

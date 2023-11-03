@@ -86,6 +86,10 @@ class ChessboardCornerFinderApp(QMainWindow):
         self.keyPoint.clicked.connect(self.findKeyPoint)
         layout.addWidget(self.keyPoint)
 
+        self.match = QPushButton("4.2 Matched Keypoints")
+        self.match.clicked.connect(self.matchKeypoints)
+        layout.addWidget(self.match)
+
 
 
 
@@ -333,12 +337,35 @@ class ChessboardCornerFinderApp(QMainWindow):
         self.img2 = cv2.imread(self.img2_path)
         self.img2 = cv2.resize(self.img2, None, fx=0.3, fy=0.3)
 
+    def doSIFT(self,img):
+        sift = cv2.SIFT_create()
+        kp, des = sift.detectAndCompute(img, None)
+        return kp, des
+
     def findKeyPoint(self):
         img1 = cv2.cvtColor(self.img1, cv2.COLOR_BGR2GRAY)
-        sift = cv2.SIFT_create()
-        kp, des = sift.detectAndCompute(img1, None)
+        kp, des = self.doSIFT(img1)
         left_image_with_keypoints = cv2.drawKeypoints(self.img1, kp, None, color=(0, 255, 0))
         cv2.imshow('Left Image with Keypoints', left_image_with_keypoints)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+    def matchKeypoints(self):
+        # left_image = cv2.imread('Q4_Image/Left.jpg')
+        img1 = cv2.cvtColor(self.img1, cv2.COLOR_BGR2GRAY)
+        # right_image = cv2.imread('Q4_Image/Right.jpg')
+        img2 = cv2.cvtColor(self.img2, cv2.COLOR_BGR2GRAY)
+        kp1, des1 = self.doSIFT(img1)
+        kp2, des2 = self.doSIFT(img2)
+        bf = cv2.BFMatcher()
+        matches = bf.knnMatch(des1, des2, k=2)
+        good_matches = []
+        for m, n in matches:
+            if m.distance < 0.75 * n.distance:
+                good_matches.append(m)
+        matched_image = cv2.drawMatches(self.img1, kp1, self.img2, kp2, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+        matched_image = cv2.resize(matched_image,None,fx=0.5,fy=0.5)
+        cv2.imshow('Matched Keypoints', matched_image)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
     
